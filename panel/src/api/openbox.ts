@@ -690,6 +690,12 @@ export const fetchRuleListPreview = async (
   return requestJson<OpenboxRulesetEntries>(`/api/openbox/rulesets/preview?${params.toString()}`)
 }
 
+// 导入规则:预览时一次返回规则集解析后的全部域名 / IP,保存站点集后即不再依赖原 URL。
+export const importRuleList = async (url: string): Promise<OpenboxRulesetEntries> => {
+  const params = new URLSearchParams({ url })
+  return requestJson<OpenboxRulesetEntries>(`/api/openbox/rulesets/import?${params.toString()}`)
+}
+
 export const fetchRulesetEntries = async (
   tag: string,
   { q = '', offset = 0, limit = 50 }: { q?: string; offset?: number; limit?: number } = {},

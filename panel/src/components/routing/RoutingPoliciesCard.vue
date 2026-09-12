@@ -351,14 +351,23 @@
         <div class="flex flex-col gap-2">
           <div class="flex items-center justify-between gap-2">
             <label class="text-xs font-medium">{{ $t('routingPolicyRulesLabel') }}</label>
-            <button
-              type="button"
-              class="btn btn-ghost btn-xs"
-              @click="addRule()"
-            >
-              <PlusIcon class="h-3.5 w-3.5" />
-              {{ $t('routingPolicyRuleAdd') }}
-            </button>
+            <div class="flex items-center gap-1">
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                @click="openRuleImport"
+              >
+                {{ $t('routingPolicyRuleImport') }}
+              </button>
+              <button
+                type="button"
+                class="btn btn-ghost btn-xs"
+                @click="addRule()"
+              >
+                <PlusIcon class="h-3.5 w-3.5" />
+                {{ $t('routingPolicyRuleAdd') }}
+              </button>
+            </div>
           </div>
 
           <p
@@ -462,12 +471,74 @@
         </div>
       </div>
     </DialogWrapper>
+
+    <DialogWrapper
+      v-model="showRuleImport"
+      :title="$t('routingPolicyRuleImportTitle')"
+      box-class="w-full max-w-2xl"
+    >
+      <div class="flex flex-col gap-3">
+        <p class="text-base-content/60 text-xs">{{ $t('routingPolicyRuleImportHint') }}</p>
+        <div class="flex items-center gap-2">
+          <input
+            v-model="importUrl"
+            type="url"
+            class="input input-sm min-w-0 flex-1 font-mono text-xs"
+            :placeholder="$t('routingPolicyRuleUrlPlaceholder')"
+            @keydown.enter.prevent="previewImport"
+          />
+          <button
+            type="button"
+            class="btn btn-primary btn-sm"
+            :disabled="importLoading || !importUrl.trim()"
+            @click="previewImport"
+          >
+            <span v-if="importLoading" class="loading loading-spinner loading-xs" />
+            {{ $t('routingPolicyRuleImportPreview') }}
+          </button>
+        </div>
+        <p v-if="importError" class="text-error text-xs">{{ importError }}</p>
+        <template v-if="importPreview">
+          <p class="text-base-content/60 text-xs">
+            {{ $t('routingPolicyRuleImportCount', { count: importPreview.length }) }}
+          </p>
+          <div class="border-base-300/60 max-h-80 overflow-y-auto rounded-lg border">
+            <p v-if="!importPreview.length" class="text-base-content/50 py-8 text-center text-xs">
+              {{ $t('geoEntriesEmpty') }}
+            </p>
+            <ul v-else>
+              <li
+                v-for="(entry, index) in importPreview"
+                :key="`${entry.type}:${entry.value}:${index}`"
+                class="border-base-300/40 flex items-center gap-2 border-b px-3 py-1.5 last:border-b-0"
+              >
+                <span class="badge badge-ghost badge-xs shrink-0">{{ importTypeLabel(entry.type) }}</span>
+                <span class="min-w-0 flex-1 truncate font-mono text-xs">{{ entry.value }}</span>
+              </li>
+            </ul>
+          </div>
+          <div class="flex justify-end gap-2">
+            <button type="button" class="btn btn-sm" @click="showRuleImport = false">
+              {{ $t('cancel') }}
+            </button>
+            <button
+              type="button"
+              class="btn btn-primary btn-sm"
+              :disabled="!importPreview.length"
+              @click="applyImportedRules"
+            >
+              {{ $t('routingPolicyRuleImportApply') }}
+            </button>
+          </div>
+        </template>
+      </div>
+    </DialogWrapper>
   </div>
 </template>
 
 <script setup lang="ts">
 import type { OpenboxCustomPolicy, OpenboxCustomRule, OpenboxProfile, OpenboxRoutingPolicy, OpenboxUserGroup } from '@/api/openbox'
-import { fetchNodeGroups, RULESET_TAG_PATTERN } from '@/api/openbox'
+import { fetchNodeGroups, importRuleList, RULESET_TAG_PATTERN } from '@/api/openbox'
 import CountryFlag from '@/components/common/CountryFlag.vue'
 import CountrySelect from '@/components/common/CountrySelect.vue'
 import IconScaleInput from '@/components/common/IconScaleInput.vue'
@@ -759,6 +830,56 @@ const showEditor = ref(false)
 const editing = ref<OpenboxRoutingPolicy | null>(null)
 const draft = ref<OpenboxRoutingPolicy | null>(null)
 const rules = ref<RuleRow[]>([])
+
+type ImportedRule = { type: string; value: string }
+const showRuleImport = ref(false)
+const importUrl = ref('')
+const importPreview = ref<ImportedRule[] | null>(null)
+const importLoading = ref(false)
+const importError = ref('')
+
+const importTypeMap: Record<string, RuleType | undefined> = {
+  domain: 'domain',
+  domain_suffix: 'domainSuffix',
+  domain_keyword: 'domainKeyword',
+  ip_cidr: 'ipCidr',
+}
+const importTypeLabel = (type: string) => {
+  const mapped = importTypeMap[type]
+  return mapped ? t(RULE_TYPES.find((item) => item.type === mapped)?.labelKey || type) : type
+}
+const openRuleImport = () => {
+  importUrl.value = ''
+  importPreview.value = null
+  importError.value = ''
+  showRuleImport.value = true
+}
+const previewImport = async () => {
+  const url = importUrl.value.trim()
+  if (!url || importLoading.value) return
+  importLoading.value = true
+  importError.value = ''
+  try {
+    const result = await importRuleList(url)
+    importPreview.value = (result.entries || []).filter((entry) => importTypeMap[entry.type] && entry.value.trim())
+  } catch (error) {
+    importPreview.value = null
+    importError.value = error instanceof Error ? error.message : String(error)
+  } finally {
+    importLoading.value = false
+  }
+}
+const applyImportedRules = () => {
+  if (!importPreview.value?.length) return
+  const outbound = rules.value[rules.value.length - 1]?.outbound || ''
+  const imported = importPreview.value.flatMap((entry) => {
+    const type = importTypeMap[entry.type]
+    return type ? [{ key: ++ruleKeySeed, type, value: entry.value, outbound }] : []
+  })
+  // 导入是追加本地明细:原有的规则集链接必须保留,两种来源可以同时生效。
+  rules.value = [...rules.value.filter((rule) => rule.value.trim()), ...imported]
+  showRuleImport.value = false
+}
 
 // 这一行以外、同类型规则已经选了的分类:下拉框里不再出现,同一个集不会被加两遍
 const pickedElsewhere = (index: number) =>

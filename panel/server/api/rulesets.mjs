@@ -161,6 +161,26 @@ export const registerRulesetRoutes = (app, { ctx, paths, store, fetchImpl = glob
     }
   })
 
+  // 导入规则:把远程名单一次解析成明细,交给站点集编辑器转成本地规则。
+  // 这里只负责下载和解析,不写档案、不编译 .srs;用户点编辑器的「保存」时才会随站点集
+  // 一起落库,这样导入完成后启动不再依赖这个 URL。
+  router.get('/rulesets/import', async (req, res) => {
+    const url = String(req.query.url || '').trim()
+    if (!/^https?:\/\/[^\s]+$/i.test(url) || url.length > 2048) {
+      return res.status(400).json({ message: '规则集链接必须是 http(s) 网址' })
+    }
+    try {
+      const parsed = await loadRuleList(fetchImpl, url)
+      const entries = []
+      for (const [type, values] of Object.entries(parsed)) {
+        for (const value of values) entries.push({ type, value })
+      }
+      res.json({ url, total: entries.length, matched: entries.length, offset: 0, limit: entries.length, entries })
+    } catch (error) {
+      res.status(503).json({ message: error instanceof Error ? error.message : String(error) })
+    }
+  })
+
   // GET /api/openbox/rulesets/entries?tag=geosite-cn&q=&offset=0&limit=50
   router.get('/rulesets/entries', async (req, res) => {
     const tag = String(req.query.tag || '')
