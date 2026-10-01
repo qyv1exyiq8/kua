@@ -46,7 +46,7 @@ git clone --depth=1 https://github.com/wukongdaily/luci-app-run package/luci-app
 rm -rf feeds/luci/themes/luci-theme-argon
 rm -rf feeds/luci/applications/luci-app-adguardhome
 
-git clone --depth=1 https://github.com/t9pyo2tckt/luci-app-adguardhome package/luci-app-AAAAA
+git clone --depth=1 https://github.com/qyv1exyiq8/luci-app-adguardhome package/luci-app-AAAAA
 git clone --depth=1 https://github.com/jerrykuku/luci-theme-argon package/luci-theme-argon
 
 # 下载luci-app-quickstart安装包
