@@ -77,21 +77,21 @@ jobs:
             img_pattern: "*combined-efi.img.gz"
             target_arch: x86_64
             #checkout_commit: 179e17ece6d2445cc2a3fcdecf9bdd5d7d933f3f
-          # immortalwrt x86
-          - name: 🟣 immortalwrtx86
-            config_file: immortalwrtx86
-            source: immortalwrt/immortalwrt:openwrt-25.12
-            fw_tag: immortalwrtx86
-            img_pattern: "*squashfs-combined-efi.img.gz"
-            target_arch: x86_64
-          # lede meson8b
-          - name: 🟠 meson8b
-            config_file: meson8b
-            source: coolsnowwolf/lede:master
-            fw_tag: meson8b
-            img_pattern: "*emmc.burn.img.xz"
-            target_arch: armv7
-            #checkout_commit: 179e17ece6d2445cc2a3fcdecf9bdd5d7d933f3f
+          # # immortalwrt x86
+          # - name: 🟣 immortalwrtx86
+          #   config_file: immortalwrtx86
+          #   source: immortalwrt/immortalwrt:openwrt-25.12
+          #   fw_tag: immortalwrtx86
+          #   img_pattern: "*squashfs-combined-efi.img.gz"
+          #   target_arch: x86_64
+          # # lede meson8b
+          # - name: 🟠 meson8b
+          #   config_file: meson8b
+          #   source: coolsnowwolf/lede:master
+          #   fw_tag: meson8b
+          #   img_pattern: "*emmc.burn.img.xz"
+          #   target_arch: armv7
+          #   #checkout_commit: 179e17ece6d2445cc2a3fcdecf9bdd5d7d933f3f
     steps:
       - name: 🏗️ 初始化环境
         run: |
