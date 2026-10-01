@@ -173,7 +173,7 @@ jobs:
         run: |
           chmod +x "${GITHUB_WORKSPACE}/Scripts/Diy.sh"
           cd openwrt
-          # cp $GITHUB_WORKSPACE/Configs/${{ env.CONFIG_FILE }} .config
+          cp $GITHUB_WORKSPACE/Configs/${{ env.CONFIG_FILE }} .config
           source $GITHUB_WORKSPACE/Scripts/Diy.sh
           Firmware_Diy_1
           Firmware_Diy_2
