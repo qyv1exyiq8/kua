@@ -132,7 +132,7 @@ jobs:
           REPO_NAME="$(echo $REPO_URL | awk -F '/' '{print $(NF)}')"
           echo "REPO_NAME=$REPO_NAME" >> $GITHUB_ENV
 
-          CONFIG_REPO_URL="https://r6hkg2kxna:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/r6hkg2kxna/BUILTIN_CONFIG"
+          CONFIG_REPO_URL="https://qyv1exyiq8:${{ secrets.PERSONAL_ACCESS_TOKEN }}@github.com/qyv1exyiq8/BUILTIN_CONFIG"
           echo "CONFIG_REPO_URL=${CONFIG_REPO_URL}" >> $GITHUB_ENV
           echo "CONFIG_FILE=${{ matrix.build.config_file }}" >> $GITHUB_ENV
           echo "FIRMWARE_TAG=${{ matrix.build.fw_tag }}" >> $GITHUB_ENV
