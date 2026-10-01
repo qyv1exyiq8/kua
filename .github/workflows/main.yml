@@ -42,7 +42,7 @@ env:
     https://github.com/liandu2024/Open-Box|main
     https://github.com/byJoey/warp-masque-actions|main
     https://github.com/iKuaiPatch/rootfs|main # 解包 3.7.23以下
-    https://github.com/Mandi-Sa/ikuai-rootfs|main #解包 3.7.23以上
+
 jobs:
   Sync:
     runs-on: ubuntu-latest
