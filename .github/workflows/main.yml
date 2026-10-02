@@ -42,6 +42,7 @@ env:
     https://github.com/liandu2024/Open-Box|main
     https://github.com/byJoey/warp-masque-actions|main
     https://github.com/iKuaiPatch/rootfs|main
+    https://github.com/sekzhao/Open-Box|main
 
 jobs:
   Sync:
