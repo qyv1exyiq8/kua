@@ -41,7 +41,7 @@ env:
     https://github.com/Openwrt-Passwall/openwrt-passwall2|main
     https://github.com/liandu2024/Open-Box|main
     https://github.com/byJoey/warp-masque-actions|main
-    https://github.com/iKuaiPatch/rootfs|main # 解包 3.7.23以下
+    https://github.com/iKuaiPatch/rootfs|main
 
 jobs:
   Sync:
