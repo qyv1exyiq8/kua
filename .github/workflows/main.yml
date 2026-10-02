@@ -39,7 +39,7 @@ env:
     https://github.com/Openwrt-Passwall/openwrt-passwall-packages|main
     https://github.com/Openwrt-Passwall/openwrt-passwall|main
     https://github.com/Openwrt-Passwall/openwrt-passwall2|main
-    https://github.com/liandu2024/Open-Box|main
+    # https://github.com/liandu2024/Open-Box|main
     https://github.com/byJoey/warp-masque-actions|main
     https://github.com/iKuaiPatch/rootfs|main
     https://github.com/sekzhao/Open-Box|main
