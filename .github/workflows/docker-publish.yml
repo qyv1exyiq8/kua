@@ -1,0 +1,148 @@
+name: Sync Docker image to Docker Hub
+
+# 定时把最新 Release 的 linux/amd64 镜像同步到 Docker Hub。
+# 只推 amd64：Release 里另有 arm64 镜像包，ARM 设备继续走 Release 下载 + docker load。
+
+on:
+  schedule:
+    # 每天 03:17 UTC（北京时间 11:17），避开整点高峰
+    - cron: "17 3 * * *"
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 指定同步的版本号，留空则取最新 Release（例：v0.1.369）
+        required: false
+        type: string
+      force:
+        description: 目标版本已存在时仍强制重新推送
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+concurrency:
+  group: docker-hub-sync
+  cancel-in-progress: false
+
+# 非敏感配置走 Actions Variables，敏感令牌走 Secrets。
+#   Variables（可选）：DOCKERHUB_IMAGE、DOCKERHUB_USERNAME、DOCKER_REPO
+#   Secrets（必需）：DOCKERHUB_TOKEN
+env:
+  IMAGE: ${{ vars.DOCKERHUB_IMAGE || 'kkxdv/open-box' }}
+  REPO: ${{ vars.DOCKER_REPO || 'liandu2024/Open-Box' }}
+
+jobs:
+  sync:
+    name: 同步 amd64 镜像
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: 登录 Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME || 'kkxdv' }}
+          password: ${{ secrets.DOCKERHUB_TOKEN || vars.DOCKERHUB_TOKEN }}
+
+      - name: 解析目标版本
+        id: target
+        run: |
+          set -euo pipefail
+          ver="${{ inputs.version }}"
+          if [ -z "$ver" ]; then
+            ver=$(curl -fsSL -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${REPO}/releases/latest" | jq -r '.tag_name')
+          fi
+          ver="${ver#v}"
+          if [ -z "$ver" ] || [ "$ver" = "null" ]; then
+            echo "没有找到可用的 Release 版本" >&2
+            exit 1
+          fi
+          echo "version=$ver" >> "$GITHUB_OUTPUT"
+          echo "目标版本：$ver"
+
+      - name: 检查是否需要同步
+        id: check
+        run: |
+          set -euo pipefail
+          ver="${{ steps.target.outputs.version }}"
+          if [ "${{ inputs.force }}" = "true" ]; then
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+            echo "force 已开启，强制同步 $ver"
+            exit 0
+          fi
+          if docker manifest inspect "${IMAGE}:${ver}" >/dev/null 2>&1; then
+            echo "needed=false" >> "$GITHUB_OUTPUT"
+            echo "${IMAGE}:${ver} 已存在，跳过同步"
+          else
+            echo "needed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 查找 Release 里的 amd64 镜像包
+        id: asset
+        run: |
+          set -euo pipefail
+          ver="${{ steps.target.outputs.version }}"
+          name="open-box-docker-${ver}-linux-x64.tar.gz"
+          url=$(curl -fsSL -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${REPO}/releases/tags/v${ver}" \
+            | jq -r --arg n "$name" '.assets[] | select(.name == $n) | .browser_download_url')
+          if [ -z "$url" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "Release v${ver} 不含 $name，跳过本次同步"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "url=$url" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: 下载并校验镜像包
+        if: steps.check.outputs.needed == 'true' && steps.asset.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          ver="${{ steps.target.outputs.version }}"
+          asset="open-box-docker-${ver}-linux-x64.tar.gz"
+          curl -fsSL --retry 3 -o "$asset" "${{ steps.asset.outputs.url }}"
+          curl -fsSL --retry 3 -o "$asset.sha256" \
+            "https://github.com/${REPO}/releases/download/v${ver}/${asset}.sha256"
+          sha256sum -c "$asset.sha256"
+
+      - name: 载入镜像并推送
+        if: steps.check.outputs.needed == 'true' && steps.asset.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          ver="${{ steps.target.outputs.version }}"
+          asset="open-box-docker-${ver}-linux-x64.tar.gz"
+          docker load -i "$asset"
+          src=$(docker images --format '{{.Repository}}:{{.Tag}}' | grep -E '^open-box:' | head -n 1)
+          if [ -z "$src" ]; then
+            echo "镜像载入后没有找到 open-box 标签" >&2
+            exit 1
+          fi
+          if [ "$src" != "open-box:${ver}" ]; then
+            echo "镜像标签 $src 与 Release 版本 $ver 不一致" >&2
+            exit 1
+          fi
+          docker tag "$src" "${IMAGE}:${ver}"
+          docker push "${IMAGE}:${ver}"
+          docker tag "$src" "${IMAGE}:latest"
+          docker push "${IMAGE}:latest"
+
+      - name: 输出同步结果
+        if: steps.check.outputs.needed == 'true' && steps.asset.outputs.found == 'true'
+        run: |
+          set -euo pipefail
+          ver="${{ steps.target.outputs.version }}"
+          digest=$(docker manifest inspect --verbose "${IMAGE}:${ver}" \
+            | jq -r '.[].Descriptor.digest' | head -n 1)
+          {
+            echo "### Docker Hub 同步完成"
+            echo ""
+            echo "- 镜像：\`${IMAGE}:${ver}\`"
+            echo "- latest：\`${IMAGE}:latest\`"
+            echo "- 架构：linux/amd64"
+            echo "- digest：\`${digest}\`"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "同步完成：${IMAGE}:${ver} (linux/amd64) ${digest}"
