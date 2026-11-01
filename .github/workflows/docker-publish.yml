@@ -2,6 +2,7 @@ name: Sync Docker image to Docker Hub
 
 # 定时把最新 Release 的 linux/amd64 镜像同步到 Docker Hub。
 # 只推 amd64：Release 里另有 arm64 镜像包，ARM 设备继续走 Release 下载 + docker load。
+# 保留策略：Docker Hub 上只保留最新 10 个版本标签（latest 不计入），其余版本标签在每次同步后自动删除。
 
 on:
   schedule:
@@ -129,6 +130,71 @@ jobs:
           docker push "${IMAGE}:${ver}"
           docker tag "$src" "${IMAGE}:latest"
           docker push "${IMAGE}:latest"
+
+      # 只保留最新 10 个版本标签（按推送时间倒序，latest 不计入），其余删除
+      - name: 清理旧版本（只保留最新 10 个）
+        run: |
+          set -euo pipefail
+          KEEP=10
+          USERNAME="${{ vars.DOCKERHUB_USERNAME || secrets.DOCKERHUB_USERNAME || 'kkxdv' }}"
+          TOKEN="${{ secrets.DOCKERHUB_TOKEN || vars.DOCKERHUB_TOKEN }}"
+          if [ -z "$TOKEN" ]; then
+            echo "缺少 DOCKERHUB_TOKEN，跳过清理" >&2
+            exit 1
+          fi
+
+          # Docker Hub API 登录（PAT 可作为 password）
+          JWT=$(curl -fsSL --retry 3 -X POST \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"${USERNAME}\",\"password\":\"${TOKEN}\"}" \
+            "https://hub.docker.com/v2/users/login/" | jq -r '.token')
+          if [ -z "$JWT" ] || [ "$JWT" = "null" ]; then
+            echo "Docker Hub 登录失败，跳过清理" >&2
+            exit 1
+          fi
+
+          # 分页拉取全部标签及其更新时间
+          all=$(mktemp)
+          page=1
+          while true; do
+            curl -fsSL --retry 3 -H "Authorization: JWT ${JWT}" \
+              "https://hub.docker.com/v2/repositories/${IMAGE}/tags/?page_size=100&page=${page}" \
+              > /tmp/dh_tags_page.json
+            jq -r '.results[] | [.name, .last_updated] | @tsv' /tmp/dh_tags_page.json >> "$all"
+            next=$(jq -r '.next // empty' /tmp/dh_tags_page.json)
+            if [ -z "$next" ]; then
+              break
+            fi
+            page=$((page + 1))
+          done
+
+          # 按更新时间倒序，latest 不计入保留名额
+          sorted=$(mktemp)
+          sort -t$'\t' -k2,2r "$all" | awk -F'\t' '$1 != "latest"' > "$sorted"
+          total=$(wc -l < "$sorted")
+          echo "版本标签共 ${total} 个，保留最新 ${KEEP} 个，latest 始终保留"
+
+          # 保留名单之外的全部删除
+          tail -n "+$((KEEP + 1))" "$sorted" | cut -f1 > /tmp/dh_tags_del.txt
+          deleted=0
+          while IFS= read -r tag; do
+            [ -z "$tag" ] && continue
+            echo "删除旧版本标签：${tag}"
+            if curl -fsSL --retry 3 -X DELETE \
+              -H "Authorization: JWT ${JWT}" \
+              "https://hub.docker.com/v2/repositories/${IMAGE}/tags/${tag}/"; then
+              deleted=$((deleted + 1))
+            else
+              echo "删除 ${tag} 失败（可能已被删除），继续" >&2
+            fi
+          done < /tmp/dh_tags_del.txt
+
+          echo "清理完成：已删除 ${deleted} 个旧版本标签"
+          {
+            echo ""
+            echo "- 保留策略：最新 ${KEEP} 个版本 + latest"
+            echo "- 本次清理删除：${deleted} 个旧版本标签"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 输出同步结果
         if: steps.check.outputs.needed == 'true' && steps.asset.outputs.found == 'true'
