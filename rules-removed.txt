@@ -1,0 +1,5 @@
+x.com##[id^="urt"]>ul>li:has([class*="data-ad-disclosure"])
+||access.kaiko.cam^
+||bellaads.com^
+||flexterkita.com^
+||slike.indiatimes.com^
